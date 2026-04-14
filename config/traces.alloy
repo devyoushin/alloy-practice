@@ -1,0 +1,103 @@
+// ============================================================
+// 트레이스 수집 전용 Alloy 설정
+// 수신 방식: OTLP (gRPC :4317, HTTP :4318)
+// 목적지: Grafana Tempo
+// ============================================================
+
+// ────────────────────────────────────────
+// 1. OTLP 수신 (앱 → Alloy)
+// ────────────────────────────────────────
+
+otelcol.receiver.otlp "default" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    traces = [otelcol.processor.memory_limiter.default.input]
+  }
+}
+
+// ────────────────────────────────────────
+// 2. 메모리 제한 (OOM 방지)
+// ────────────────────────────────────────
+
+otelcol.processor.memory_limiter "default" {
+  limit_mib       = 512
+  spike_limit_mib = 128
+  check_interval  = "1s"
+
+  output {
+    traces = [otelcol.processor.attributes.default.input]
+  }
+}
+
+// ────────────────────────────────────────
+// 3. 속성 추가 (클러스터 메타데이터 enrichment)
+// ────────────────────────────────────────
+
+otelcol.processor.attributes "default" {
+  action {
+    key    = "cluster"
+    value  = "eks-production"
+    action = "insert"
+  }
+
+  action {
+    key    = "region"
+    value  = "ap-northeast-2"
+    action = "insert"
+  }
+
+  output {
+    traces = [otelcol.processor.batch.default.input]
+  }
+}
+
+// ────────────────────────────────────────
+// 4. 배치 처리 (효율적인 전송)
+// ────────────────────────────────────────
+
+otelcol.processor.batch "default" {
+  timeout             = "5s"
+  send_batch_size     = 1000
+  send_batch_max_size = 10000
+
+  output {
+    traces = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+// ────────────────────────────────────────
+// 5. Tempo로 전송
+// ────────────────────────────────────────
+
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo.monitoring.svc.cluster.local:4317"
+
+    tls {
+      insecure = true
+    }
+
+    headers = {
+      "X-Scope-OrgID" = "default",
+    }
+
+    retry_on_failure {
+      enabled          = true
+      initial_interval = "5s"
+      max_interval     = "30s"
+      max_elapsed_time = "5m"
+    }
+
+    sending_queue {
+      enabled       = true
+      num_consumers = 10
+      queue_size    = 1000
+    }
+  }
+}

@@ -1,0 +1,383 @@
+# Grafana Alloy Helm Values (운영 HA용)
+# helm install alloy grafana/alloy --namespace monitoring --values values-ha.yaml
+#
+# 이 설정은 메트릭 수집 전용 Deployment + 클러스터링 구성입니다.
+# 로그 수집은 별도 DaemonSet으로 분리 배포를 권장합니다.
+
+## 배포 방식 (Deployment + 클러스터링)
+controller:
+  type: deployment
+  replicas: 3
+
+## 클러스터링 (타겟 자동 분산)
+clustering:
+  enabled: true
+  name: "alloy-metrics"
+
+## Headless Service (클러스터링에 필수 — Pod 간 직접 통신)
+service:
+  type: ClusterIP
+  clusterIP: "None"
+  port: 12345
+
+## 서비스 어카운트
+serviceAccount:
+  create: true
+  name: alloy
+
+rbac:
+  create: true
+
+## 이미지 설정
+image:
+  repository: grafana/alloy
+  pullPolicy: IfNotPresent
+
+## 리소스 설정 (운영용)
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+## WAL 영구 스토리지 (StatefulSet 전환 시 사용)
+# StatefulSet 방식은 아래 주석 해제 후 controller.type=statefulset 변경
+# volumeClaimTemplates:
+#   - metadata:
+#       name: wal
+#     spec:
+#       accessModes: ["ReadWriteOnce"]
+#       storageClassName: gp3
+#       resources:
+#         requests:
+#           storage: 20Gi
+
+## Pod Anti-affinity (가용영역 분산)
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: alloy
+          topologyKey: topology.kubernetes.io/zone
+
+## PodDisruptionBudget (최소 1개 Pod 유지)
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+## Alloy 설정 (운영용 — 메트릭 + 트레이스, 로그는 별도 DaemonSet)
+alloy:
+  configMap:
+    create: true
+    content: |
+      // ============================================
+      // 클러스터링 활성화
+      // ============================================
+      alloy.clustering "default" {
+        enabled = true
+      }
+
+      // ============================================
+      // 메트릭 파이프라인 (클러스터링 적용)
+      // ============================================
+      discovery.kubernetes "pods" {
+        role = "pod"
+      }
+
+      discovery.kubernetes "nodes" {
+        role = "node"
+      }
+
+      discovery.relabel "pods" {
+        targets = discovery.kubernetes.pods.targets
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scrape"]
+          regex         = "true"
+          action        = "keep"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_phase"]
+          regex         = "Running"
+          action        = "keep"
+        }
+
+        rule {
+          source_labels = ["__address__", "__meta_kubernetes_pod_annotation_prometheus_io_port"]
+          regex         = "([^:]+)(?::\\d+)?;(\\d+)"
+          replacement   = "$1:$2"
+          target_label  = "__address__"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_path"]
+          regex         = "(.+)"
+          target_label  = "__metrics_path__"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app"]
+          target_label  = "app"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_node_name"]
+          target_label  = "node"
+        }
+      }
+
+      prometheus.scrape "pods" {
+        targets         = discovery.relabel.pods.output
+        forward_to      = [prometheus.remote_write.mimir.receiver]
+        scrape_interval = "30s"
+        job_name        = "kubernetes-pods"
+
+        // 클러스터링으로 타겟 자동 분산
+        clustering {
+          enabled = true
+        }
+      }
+
+      // kubelet 메트릭
+      discovery.relabel "nodes" {
+        targets = discovery.kubernetes.nodes.targets
+
+        rule {
+          target_label = "__scheme__"
+          replacement  = "https"
+        }
+
+        rule {
+          target_label = "__metrics_path__"
+          replacement  = "/metrics"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_node_name"]
+          target_label  = "node"
+        }
+      }
+
+      prometheus.scrape "kubelet" {
+        targets    = discovery.relabel.nodes.output
+        forward_to = [prometheus.remote_write.mimir.receiver]
+        scheme     = "https"
+        job_name   = "kubelet"
+
+        tls_config {
+          ca_file              = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+          insecure_skip_verify = false
+        }
+
+        bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+
+        clustering {
+          enabled = true
+        }
+      }
+
+      // cAdvisor 메트릭
+      discovery.relabel "cadvisor" {
+        targets = discovery.kubernetes.nodes.targets
+
+        rule {
+          target_label = "__scheme__"
+          replacement  = "https"
+        }
+
+        rule {
+          target_label = "__metrics_path__"
+          replacement  = "/metrics/cadvisor"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_node_name"]
+          target_label  = "node"
+        }
+      }
+
+      prometheus.scrape "cadvisor" {
+        targets    = discovery.relabel.cadvisor.output
+        forward_to = [prometheus.remote_write.mimir.receiver]
+        scheme     = "https"
+        job_name   = "cadvisor"
+
+        tls_config {
+          ca_file              = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+          insecure_skip_verify = false
+        }
+
+        bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+
+        clustering {
+          enabled = true
+        }
+      }
+
+      // PodMonitor / ServiceMonitor 지원
+      prometheus.operator.podmonitors "default" {
+        forward_to = [prometheus.remote_write.mimir.receiver]
+        clustering {
+          enabled = true
+        }
+      }
+
+      prometheus.operator.servicemonitors "default" {
+        forward_to = [prometheus.remote_write.mimir.receiver]
+        clustering {
+          enabled = true
+        }
+      }
+
+      prometheus.remote_write "mimir" {
+        endpoint {
+          url = "http://mimir-nginx.monitoring.svc.cluster.local:8080/api/v1/push"
+
+          headers = {
+            "X-Scope-OrgID" = "production",
+          }
+
+          queue_config {
+            capacity             = 10000
+            max_shards           = 50
+            min_shards           = 5
+            max_samples_per_send = 2000
+            batch_send_deadline  = "5s"
+          }
+        }
+
+        // WAL 설정 (재시작 후 재전송)
+        wal {
+          truncate_frequency = "2h"
+          min_keepalive_time = "5m"
+          max_keepalive_time = "8h"
+        }
+
+        external_labels = {
+          cluster = "eks-production",
+          region  = "ap-northeast-2",
+        }
+      }
+
+      // ============================================
+      // 트레이스 파이프라인
+      // ============================================
+      otelcol.receiver.otlp "default" {
+        grpc {
+          endpoint = "0.0.0.0:4317"
+        }
+        http {
+          endpoint = "0.0.0.0:4318"
+        }
+        output {
+          traces = [otelcol.processor.memory_limiter.default.input]
+        }
+      }
+
+      otelcol.processor.memory_limiter "default" {
+        limit_mib       = 512
+        spike_limit_mib = 128
+        check_interval  = "1s"
+        output {
+          traces = [otelcol.processor.batch.default.input]
+        }
+      }
+
+      otelcol.processor.batch "default" {
+        timeout         = "5s"
+        send_batch_size = 1000
+        output {
+          traces = [otelcol.exporter.otlp.tempo.input]
+        }
+      }
+
+      otelcol.exporter.otlp "tempo" {
+        client {
+          endpoint = "tempo.monitoring.svc.cluster.local:4317"
+          tls {
+            insecure = true
+          }
+          headers = {
+            "X-Scope-OrgID" = "production",
+          }
+
+          retry_on_failure {
+            enabled          = true
+            initial_interval = "5s"
+            max_interval     = "30s"
+            max_elapsed_time = "5m"
+          }
+
+          sending_queue {
+            enabled       = true
+            num_consumers = 10
+            queue_size    = 1000
+          }
+        }
+      }
+
+      // ============================================
+      // Alloy 자체 모니터링
+      // ============================================
+      prometheus.scrape "alloy_self" {
+        targets = [{
+          "__address__" = "localhost:12345",
+          "job"         = "alloy",
+        }]
+        forward_to      = [prometheus.remote_write.mimir.receiver]
+        scrape_interval = "15s"
+      }
+
+  extraArgs:
+    - --server.http.listen-addr=0.0.0.0:12345
+    - --stability.level=generally-available
+    - --cluster.enabled=true
+    - --cluster.name=alloy-metrics
+
+## ServiceMonitor (Prometheus Operator가 있는 경우)
+serviceMonitor:
+  enabled: true
+  interval: 15s
+
+## Pod 어노테이션
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "12345"
+  prometheus.io/path: "/metrics"
+
+## 보안 컨텍스트 (Deployment는 root 불필요)
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+
+## topologySpreadConstraints (가용영역 균등 분산)
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: alloy

@@ -1,0 +1,205 @@
+// ============================================================
+// 메트릭 수집 전용 Alloy 설정
+// 대상: Kubernetes Pod, Node (kubelet), cAdvisor
+// 목적지: Grafana Mimir
+// ============================================================
+
+// ────────────────────────────────────────
+// 1. Pod 메트릭 수집
+// ────────────────────────────────────────
+
+discovery.kubernetes "pods" {
+  role = "pod"
+}
+
+discovery.relabel "pods" {
+  targets = discovery.kubernetes.pods.targets
+
+  // prometheus.io/scrape=true 어노테이션 있는 Pod만
+  rule {
+    source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scrape"]
+    regex         = "true"
+    action        = "keep"
+  }
+
+  // Running 상태의 Pod만
+  rule {
+    source_labels = ["__meta_kubernetes_pod_phase"]
+    regex         = "Running"
+    action        = "keep"
+  }
+
+  // 포트 어노테이션 적용 (prometheus.io/port)
+  rule {
+    source_labels = ["__address__", "__meta_kubernetes_pod_annotation_prometheus_io_port"]
+    regex         = "([^:]+)(?::\\d+)?;(\\d+)"
+    replacement   = "$1:$2"
+    target_label  = "__address__"
+  }
+
+  // 메트릭 경로 어노테이션 적용 (prometheus.io/path)
+  rule {
+    source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_path"]
+    regex         = "(.+)"
+    target_label  = "__metrics_path__"
+  }
+
+  // 스킴 어노테이션 적용 (prometheus.io/scheme)
+  rule {
+    source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scheme"]
+    regex         = "(https?)"
+    target_label  = "__scheme__"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_container_name"]
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_app"]
+    target_label  = "app"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+    target_label  = "app_kubernetes_io_name"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_node_name"]
+    target_label  = "node"
+  }
+}
+
+prometheus.scrape "pods" {
+  targets         = discovery.relabel.pods.output
+  forward_to      = [prometheus.remote_write.mimir.receiver]
+  scrape_interval = "30s"
+  scrape_timeout  = "10s"
+  job_name        = "kubernetes-pods"
+}
+
+// ────────────────────────────────────────
+// 2. Node (kubelet) 메트릭 수집
+// ────────────────────────────────────────
+
+discovery.kubernetes "nodes" {
+  role = "node"
+}
+
+discovery.relabel "kubelet" {
+  targets = discovery.kubernetes.nodes.targets
+
+  rule {
+    target_label = "__scheme__"
+    replacement  = "https"
+  }
+
+  rule {
+    target_label = "__metrics_path__"
+    replacement  = "/metrics"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_node_name"]
+    target_label  = "node"
+  }
+}
+
+prometheus.scrape "kubelet" {
+  targets    = discovery.relabel.kubelet.output
+  forward_to = [prometheus.remote_write.mimir.receiver]
+
+  scheme           = "https"
+  job_name         = "kubelet"
+  scrape_interval  = "60s"
+
+  tls_config {
+    ca_file              = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    insecure_skip_verify = false
+  }
+
+  bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+}
+
+// ────────────────────────────────────────
+// 3. cAdvisor 메트릭 수집 (컨테이너 리소스)
+// ────────────────────────────────────────
+
+discovery.relabel "cadvisor" {
+  targets = discovery.kubernetes.nodes.targets
+
+  rule {
+    target_label = "__scheme__"
+    replacement  = "https"
+  }
+
+  rule {
+    target_label = "__metrics_path__"
+    replacement  = "/metrics/cadvisor"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_node_name"]
+    target_label  = "node"
+  }
+}
+
+prometheus.scrape "cadvisor" {
+  targets    = discovery.relabel.cadvisor.output
+  forward_to = [prometheus.remote_write.mimir.receiver]
+
+  scheme          = "https"
+  job_name        = "cadvisor"
+  scrape_interval = "60s"
+
+  tls_config {
+    ca_file              = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    insecure_skip_verify = false
+  }
+
+  bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+}
+
+// ────────────────────────────────────────
+// 4. Remote Write (Mimir)
+// ────────────────────────────────────────
+
+prometheus.remote_write "mimir" {
+  endpoint {
+    url = "http://mimir-nginx.monitoring.svc.cluster.local:8080/api/v1/push"
+
+    headers = {
+      "X-Scope-OrgID" = "default",
+    }
+
+    queue_config {
+      capacity             = 10000
+      max_shards           = 50
+      max_samples_per_send = 2000
+      batch_send_deadline  = "5s"
+    }
+  }
+
+  wal {
+    truncate_frequency = "2h"
+    min_keepalive_time = "5m"
+    max_keepalive_time = "8h"
+  }
+
+  external_labels = {
+    cluster = "eks-production",
+    region  = "ap-northeast-2",
+  }
+}

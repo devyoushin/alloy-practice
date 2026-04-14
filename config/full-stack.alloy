@@ -1,0 +1,319 @@
+// ============================================================
+// Full-Stack Alloy 설정
+// 메트릭 + 로그 + 트레이스 통합 수집
+//
+// 배포 방식: DaemonSet (로그 수집을 위해 노드 직접 접근)
+// 백엔드: Mimir + Loki + Tempo
+// ============================================================
+
+// ────────────────────────────────────────
+// 공통 설정
+// ────────────────────────────────────────
+
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+// ────────────────────────────────────────
+// 서비스 디스커버리 (공통)
+// ────────────────────────────────────────
+
+discovery.kubernetes "pods" {
+  role = "pod"
+}
+
+discovery.kubernetes "nodes" {
+  role = "node"
+}
+
+// Pod 릴레이블링 (메트릭 + 로그 공통)
+discovery.relabel "pods" {
+  targets = discovery.kubernetes.pods.targets
+
+  // Running 상태만
+  rule {
+    source_labels = ["__meta_kubernetes_pod_phase"]
+    regex         = "Running"
+    action        = "keep"
+  }
+
+  // 공통 레이블
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_container_name"]
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_app"]
+    target_label  = "app"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_node_name"]
+    target_label  = "node"
+  }
+}
+
+// 메트릭 수집 대상만 필터링 (어노테이션 기반)
+discovery.relabel "scrape_targets" {
+  targets = discovery.relabel.pods.output
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scrape"]
+    regex         = "true"
+    action        = "keep"
+  }
+
+  // 포트 어노테이션 적용
+  rule {
+    source_labels = ["__address__", "__meta_kubernetes_pod_annotation_prometheus_io_port"]
+    regex         = "([^:]+)(?::\\d+)?;(\\d+)"
+    replacement   = "$1:$2"
+    target_label  = "__address__"
+  }
+
+  // 메트릭 경로 어노테이션 적용
+  rule {
+    source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_path"]
+    regex         = "(.+)"
+    target_label  = "__metrics_path__"
+  }
+}
+
+// ────────────────────────────────────────
+// 메트릭 파이프라인
+// ────────────────────────────────────────
+
+prometheus.scrape "pods" {
+  targets         = discovery.relabel.scrape_targets.output
+  forward_to      = [prometheus.remote_write.mimir.receiver]
+  scrape_interval = "30s"
+  job_name        = "kubernetes-pods"
+}
+
+// kubelet 메트릭
+discovery.relabel "kubelet" {
+  targets = discovery.kubernetes.nodes.targets
+
+  rule {
+    target_label = "__scheme__"
+    replacement  = "https"
+  }
+
+  rule {
+    target_label = "__metrics_path__"
+    replacement  = "/metrics"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_node_name"]
+    target_label  = "node"
+  }
+}
+
+prometheus.scrape "kubelet" {
+  targets    = discovery.relabel.kubelet.output
+  forward_to = [prometheus.remote_write.mimir.receiver]
+  scheme     = "https"
+  job_name   = "kubelet"
+
+  tls_config {
+    ca_file              = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    insecure_skip_verify = false
+  }
+
+  bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+}
+
+// cAdvisor 메트릭
+discovery.relabel "cadvisor" {
+  targets = discovery.kubernetes.nodes.targets
+
+  rule {
+    target_label = "__scheme__"
+    replacement  = "https"
+  }
+
+  rule {
+    target_label = "__metrics_path__"
+    replacement  = "/metrics/cadvisor"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_node_name"]
+    target_label  = "node"
+  }
+}
+
+prometheus.scrape "cadvisor" {
+  targets    = discovery.relabel.cadvisor.output
+  forward_to = [prometheus.remote_write.mimir.receiver]
+  scheme     = "https"
+  job_name   = "cadvisor"
+
+  tls_config {
+    ca_file              = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    insecure_skip_verify = false
+  }
+
+  bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+}
+
+// Alloy 자체 모니터링
+prometheus.scrape "alloy_self" {
+  targets = [{
+    "__address__" = "localhost:12345",
+    "job"         = "alloy",
+  }]
+  forward_to      = [prometheus.remote_write.mimir.receiver]
+  scrape_interval = "15s"
+}
+
+// Mimir 전송
+prometheus.remote_write "mimir" {
+  endpoint {
+    url = "http://mimir-nginx.monitoring.svc.cluster.local:8080/api/v1/push"
+
+    headers = {
+      "X-Scope-OrgID" = "default",
+    }
+
+    queue_config {
+      capacity             = 10000
+      max_shards           = 50
+      max_samples_per_send = 2000
+    }
+  }
+
+  wal {
+    truncate_frequency = "2h"
+    min_keepalive_time = "5m"
+    max_keepalive_time = "8h"
+  }
+
+  external_labels = {
+    cluster = "eks-production",
+    region  = "ap-northeast-2",
+  }
+}
+
+// ────────────────────────────────────────
+// 로그 파이프라인
+// ────────────────────────────────────────
+
+loki.source.kubernetes "pods" {
+  targets    = discovery.relabel.pods.output
+  forward_to = [loki.process.default.receiver]
+}
+
+loki.process "default" {
+  forward_to = [loki.write.loki.receiver]
+
+  // JSON 로그 파싱
+  stage.json {
+    expressions = {
+      level    = "level",
+      trace_id = "traceID",
+    }
+  }
+
+  stage.labels {
+    values = {
+      level = "",
+    }
+  }
+
+  // 헬스체크 로그 제거
+  stage.drop {
+    expression          = ".*GET /health.*"
+    drop_counter_reason = "healthcheck"
+  }
+
+  stage.drop {
+    expression          = ".*GET /ready.*"
+    drop_counter_reason = "readiness_check"
+  }
+}
+
+loki.write "loki" {
+  endpoint {
+    url = "http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push"
+
+    headers = {
+      "X-Scope-OrgID" = "default",
+    }
+  }
+
+  external_labels = {
+    cluster = "eks-production",
+    region  = "ap-northeast-2",
+  }
+}
+
+// ────────────────────────────────────────
+// 트레이스 파이프라인
+// ────────────────────────────────────────
+
+otelcol.receiver.otlp "default" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    traces = [otelcol.processor.memory_limiter.default.input]
+  }
+}
+
+otelcol.processor.memory_limiter "default" {
+  limit_mib       = 512
+  spike_limit_mib = 128
+  check_interval  = "1s"
+
+  output {
+    traces = [otelcol.processor.batch.default.input]
+  }
+}
+
+otelcol.processor.batch "default" {
+  timeout         = "5s"
+  send_batch_size = 1000
+
+  output {
+    traces = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo.monitoring.svc.cluster.local:4317"
+
+    tls {
+      insecure = true
+    }
+
+    headers = {
+      "X-Scope-OrgID" = "default",
+    }
+
+    retry_on_failure {
+      enabled          = true
+      initial_interval = "5s"
+      max_interval     = "30s"
+      max_elapsed_time = "5m"
+    }
+  }
+}
