@@ -46,11 +46,11 @@ kubectl logs -n monitoring -l app.kubernetes.io/name=alloy --previous
 해결:
 ```bash
 # 로컬에서 문법 검사
-docker run --rm -v $(pwd)/config:/config grafana/alloy:latest \
-  alloy fmt /config/config.alloy
+docker run --rm -v $(pwd)/../ops/config/alloy:/config grafana/alloy:latest \
+  alloy fmt /config/full-stack.alloy
 
 # 또는 alloy binary 직접 사용
-alloy fmt config.alloy
+alloy fmt ../ops/config/alloy/full-stack.alloy
 ```
 
 ### 원인 2: 백엔드 엔드포인트 연결 실패

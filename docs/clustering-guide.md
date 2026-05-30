@@ -185,7 +185,7 @@ prometheus.remote_write "mimir" {
 WAL 저장 위치는 Helm values에서 설정:
 
 ```yaml
-# helm/values-ha.yaml
+# ../ops/config/helm/values-ha.yaml
 alloy:
   extraVolumes:
     - name: wal

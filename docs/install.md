@@ -36,10 +36,10 @@ kubectl create namespace monitoring
 
 ## 3. Helm Values 준비
 
-`helm/values.yaml`을 복사하여 환경에 맞게 수정합니다.
+`../ops/config/helm/values.yaml`을 복사하여 환경에 맞게 수정합니다.
 
 ```bash
-cp helm/values.yaml my-values.yaml
+cp ../ops/config/helm/values.yaml my-values.yaml
 ```
 
 수정 필수 항목:

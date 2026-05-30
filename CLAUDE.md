@@ -17,12 +17,12 @@ alloy-practice/
 ├── .claude/
 │   ├── settings.json
 │   └── commands/              # /new-doc, /new-runbook, /review-doc, /add-troubleshooting, /search-kb
-├── agents/                    # doc-writer, pipeline-designer, integration-advisor, troubleshooter
-├── templates/                 # service-doc, runbook, incident-report
-├── rules/                     # doc-writing, alloy-conventions, security-checklist, monitoring
-├── config/                    # River 설정 파일
-├── helm/                      # Helm values 파일
-└── *-guide.md                 # 주제별 가이드 문서
+├── docs/                      # 주제별 가이드 문서, agents/rules/templates
+│   ├── agents/                # doc-writer, pipeline-designer, integration-advisor, troubleshooter
+│   ├── templates/             # service-doc, runbook, incident-report
+│   └── rules/                 # doc-writing, alloy-conventions, security-checklist, monitoring
+└── ops/
+    └── config/                # River 설정 파일과 Helm values
 ```
 
 ---
@@ -33,7 +33,7 @@ alloy-practice/
 |--------|------|---------|
 | `/new-doc` | 새 가이드 문서 생성 | `/new-doc pyroscope-profiling` |
 | `/new-runbook` | 새 런북 생성 | `/new-runbook Alloy 컴포넌트 장애 대응` |
-| `/review-doc` | 문서 검토 | `/review-doc config-language-guide.md` |
+| `/review-doc` | 문서 검토 | `/review-doc docs/config-language-guide.md` |
 | `/add-troubleshooting` | 트러블슈팅 케이스 추가 | `/add-troubleshooting 메트릭 수집 누락` |
 | `/search-kb` | 지식베이스 검색 | `/search-kb River 컴포넌트 참조` |
 
@@ -43,18 +43,18 @@ alloy-practice/
 
 | 문서 | 주제 |
 |------|------|
-| `install.md` | Alloy 설치 (Helm + EKS) |
-| `architecture-guide.md` | Alloy 아키텍처 |
-| `config-language-guide.md` | River 설정 언어 |
-| `metrics-guide.md` | 메트릭 수집 파이프라인 |
-| `logs-guide.md` | 로그 수집 파이프라인 |
-| `traces-guide.md` | 트레이스 수집 파이프라인 |
-| `otel-guide.md` | OTel 컴포넌트 연동 |
-| `kubernetes-discovery-guide.md` | K8s 자동 검색 |
-| `clustering-guide.md` | Alloy 클러스터 모드 |
-| `monitoring-guide.md` | Alloy 자체 모니터링 |
-| `troubleshooting-guide.md` | 트러블슈팅 |
-| `e2e-practice.md` | 엔드투엔드 실습 |
+| `docs/install.md` | Alloy 설치 (Helm + EKS) |
+| `docs/architecture-guide.md` | Alloy 아키텍처 |
+| `docs/config-language-guide.md` | River 설정 언어 |
+| `docs/metrics-guide.md` | 메트릭 수집 파이프라인 |
+| `docs/logs-guide.md` | 로그 수집 파이프라인 |
+| `docs/traces-guide.md` | 트레이스 수집 파이프라인 |
+| `docs/otel-guide.md` | OTel 컴포넌트 연동 |
+| `docs/kubernetes-discovery-guide.md` | K8s 자동 검색 |
+| `docs/clustering-guide.md` | Alloy 클러스터 모드 |
+| `docs/monitoring-guide.md` | Alloy 자체 모니터링 |
+| `docs/troubleshooting-guide.md` | 트러블슈팅 |
+| `docs/e2e-practice.md` | 엔드투엔드 실습 |
 
 ---
 

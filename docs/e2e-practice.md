@@ -104,10 +104,10 @@ kubectl get pods -l app=sample-app
 
 ## Step 2: Alloy 설정 구성
 
-`helm/values.yaml`을 수정하여 메트릭 + 로그 + 트레이스를 모두 수집합니다.
+`../ops/config/helm/values.yaml`을 수정하여 메트릭 + 로그 + 트레이스를 모두 수집합니다.
 
 ```bash
-cp helm/values.yaml my-values.yaml
+cp ../ops/config/helm/values.yaml my-values.yaml
 ```
 
 `my-values.yaml`의 `alloy.configMap.content`를 아래와 같이 설정:
