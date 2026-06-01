@@ -4,7 +4,7 @@ Alloy 문서는 학습 문서, 규칙, 템플릿, 에이전트 프롬프트를 �
 
 | 폴더/문서 | 내용 |
 |------|------|
-| `install.md` | Grafana Alloy Helm 설치 |
+| `install.md` | Helm, systemd, Docker Compose 설치 |
 | `architecture-guide.md` | Alloy 배포 구조와 데이터 흐름 |
 | `config-language-guide.md` | River 설정 언어 |
 | `kubernetes-discovery-guide.md` | Kubernetes service discovery |
