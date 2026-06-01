@@ -7,7 +7,7 @@
 | 방식 | 문서 | 설명 |
 |------|------|------|
 | Helm | `install-helm.md` | EKS 기준 Grafana Alloy 설치 |
-| systemd | `install-systemd.md` | 단일 VM에서 Alloy를 서비스로 관리 |
+| systemd | `install-systemd.md` | RPM 또는 tarball로 설치 후 Alloy를 서비스로 관리 |
 | Docker Compose | `install-docker-compose.md` | 로컬 파이프라인 검증용 |
 
 ## 읽는 순서
