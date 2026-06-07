@@ -4,7 +4,7 @@ EKS + Grafana Alloy 기준으로 metrics/logs/traces 파이프라인, River 설�
 
 ## 빠른 시작
 
-- 처음 볼 문서: `docs/install.md`
+- 처음 볼 문서: `docs/install/install.md`
 - 설치 방식: Helm / systemd / Docker Compose
 - 전체 흐름: 설치 -> 아키텍처/River -> Kubernetes discovery -> metrics/logs/traces -> OTel 통합 -> 운영
 - AI 작업 지침: `CLAUDE.md`
@@ -30,7 +30,7 @@ alloy-practice/
 
 | 단계 | 문서 |
 |------|------|
-| 설치 | `docs/install.md` |
+| 설치 | `docs/install/install.md` |
 | 핵심 개념 | `docs/architecture-guide.md`, `docs/config-language-guide.md`, `docs/kubernetes-discovery-guide.md` |
 | Pipeline | `docs/metrics-guide.md`, `docs/logs-guide.md`, `docs/traces-guide.md` |
 | 통합 | `docs/otel-guide.md`, `docs/e2e-practice.md` |

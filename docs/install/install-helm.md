@@ -16,7 +16,7 @@ kubectl create namespace monitoring
 ## values 준비
 
 ```bash
-cp ../ops/config/helm/values.yaml my-values.yaml
+cp ../../ops/config/helm/values.yaml my-values.yaml
 ```
 
 ## 설치

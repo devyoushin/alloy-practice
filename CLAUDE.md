@@ -43,7 +43,7 @@ alloy-practice/
 
 | 문서 | 주제 |
 |------|------|
-| `docs/install.md` | Alloy 설치 (Helm + EKS) |
+| `docs/install/install.md` | Alloy 설치 (Helm + EKS) |
 | `docs/architecture-guide.md` | Alloy 아키텍처 |
 | `docs/config-language-guide.md` | River 설정 언어 |
 | `docs/metrics-guide.md` | 메트릭 수집 파이프라인 |
