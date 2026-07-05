@@ -318,4 +318,4 @@ management:
 ## 다음 단계
 
 - [OpenTelemetry 통합](./otel-guide.md)
-- [클러스터링 & 고가용성](./clustering-guide.md)
+- [클러스터링 & 고가용성](../02-architecture-config/clustering-guide.md)

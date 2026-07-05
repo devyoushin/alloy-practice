@@ -313,5 +313,5 @@ spec:
 
 ## 다음 단계
 
-- [로그 수집 파이프라인](./logs-guide.md)
+- [로그 수집 파이프라인](../03-signals-pipelines/logs-guide.md)
 - [트레이스 수집 파이프라인](./traces-guide.md)

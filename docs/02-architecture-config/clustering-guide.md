@@ -243,5 +243,5 @@ WAL 덕분에 백엔드(Mimir/Loki) 장애 시에도 데이터를 로컬에 버�
 
 ## 다음 단계
 
-- [Alloy 자체 모니터링](./monitoring-guide.md)
-- [트러블슈팅 가이드](./troubleshooting-guide.md)
+- [Alloy 자체 모니터링](../04-operations/monitoring-guide.md)
+- [트러블슈팅 가이드](../04-operations/troubleshooting-guide.md)

@@ -322,5 +322,5 @@ discovery.relabel "endpoints" {
 
 ## 다음 단계
 
-- [메트릭 수집 파이프라인](./metrics-guide.md)
-- [로그 수집 파이프라인](./logs-guide.md)
+- [메트릭 수집 파이프라인](../03-signals-pipelines/metrics-guide.md)
+- [로그 수집 파이프라인](../03-signals-pipelines/logs-guide.md)

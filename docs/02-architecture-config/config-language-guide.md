@@ -290,4 +290,4 @@ prometheus.remote_write "mimir" {
 ## 다음 단계
 
 - [Kubernetes 서비스 디스커버리](./kubernetes-discovery-guide.md)
-- [메트릭 수집 파이프라인](./metrics-guide.md)
+- [메트릭 수집 파이프라인](../03-signals-pipelines/metrics-guide.md)

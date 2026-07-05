@@ -266,5 +266,5 @@ kubectl logs -n monitoring -l app.kubernetes.io/name=alloy | grep "prometheus.sc
 
 ## 다음 단계
 
-- [트러블슈팅 가이드](./troubleshooting-guide.md)
-- [End-to-End 실습](./e2e-practice.md)
+- [트러블슈팅 가이드](../04-operations/troubleshooting-guide.md)
+- [End-to-End 실습](../05-practice/e2e-practice.md)

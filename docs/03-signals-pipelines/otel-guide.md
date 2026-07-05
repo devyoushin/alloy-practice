@@ -298,5 +298,5 @@ otelcol.exporter.otlp "tempo" {
 
 ## 다음 단계
 
-- [클러스터링 & 고가용성](./clustering-guide.md)
-- [Alloy 자체 모니터링](./monitoring-guide.md)
+- [클러스터링 & 고가용성](../02-architecture-config/clustering-guide.md)
+- [Alloy 자체 모니터링](../04-operations/monitoring-guide.md)
